@@ -2,6 +2,10 @@
 
 Runtime files modified for the assigned-conversations permission patch:
 
+> Validated against Chatwoot v4.16.2 (upstream merge 2026-08-17). All 12
+> targets below still carry the custom changes after the upgrade; no new
+> runtime overlay files were required.
+
 ```json
 {
   "TaskTemplate": {
