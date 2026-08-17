@@ -17,7 +17,8 @@ RSpec.describe Conversations::UnreadCounts::Notifier do
     expect(Rails.configuration.dispatcher).to have_received(:dispatch).with(
       'conversation.unread_count_changed',
       kind_of(Time),
-      conversation: conversation
+      conversation: conversation,
+      changed_attributes: nil
     )
   end
 
@@ -28,6 +29,19 @@ RSpec.describe Conversations::UnreadCounts::Notifier do
       described_class.new(conversation).perform
 
       expect(Rails.configuration.dispatcher).not_to have_received(:dispatch)
+    end
+
+    it 'dispatches unread count changed event when filtered counts are enabled' do
+      conversation.account.enable_features!(:unread_count_for_filters)
+
+      described_class.new(conversation).perform
+
+      expect(Rails.configuration.dispatcher).to have_received(:dispatch).with(
+        'conversation.unread_count_changed',
+        kind_of(Time),
+        conversation: conversation,
+        changed_attributes: nil
+      )
     end
   end
 
