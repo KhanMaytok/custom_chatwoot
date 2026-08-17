@@ -10,7 +10,7 @@ class Conversations::PermissionFilterService
   def perform
     return conversations if user_role == 'administrator'
 
-    accessible_conversations
+    accessible_conversations.assigned_to(user)
   end
 
   private

@@ -16,7 +16,7 @@ class Conversations::UnreadCounts::Counter
   def perform
     return empty_counts if permission_mode == :none
 
-    ensure_base_cache!
+    ensure_base_cache! if permission_mode == :base
     ensure_assignment_cache! if assignment_mode?
 
     inbox_counts = unread_inbox_counts
@@ -150,15 +150,19 @@ class Conversations::UnreadCounts::Counter
 
   def permission_mode
     @permission_mode ||=
-      if !custom_role_agent? || permissions.include?(MANAGE_ALL_PERMISSION)
+      if account_user&.administrator?
         :base
-      elsif permissions.include?(UNASSIGNED_PERMISSION)
-        :unassigned_and_mine
-      elsif permissions.include?(PARTICIPATING_PERMISSION)
+      elsif account_user&.agent? && (!custom_role_agent? || conversation_permissions?)
         :mine
       else
         :none
       end
+  end
+
+  def conversation_permissions?
+    permissions.include?(MANAGE_ALL_PERMISSION) ||
+      permissions.include?(UNASSIGNED_PERMISSION) ||
+      permissions.include?(PARTICIPATING_PERMISSION)
   end
 
   def custom_role_agent?

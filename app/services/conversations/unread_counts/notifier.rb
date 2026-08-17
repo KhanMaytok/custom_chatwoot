@@ -13,7 +13,12 @@ class Conversations::UnreadCounts::Notifier
 
     return false unless ::Conversations::UnreadCounts::Refresher.new(conversation, changed_attributes: changed_attributes).perform
 
-    Rails.configuration.dispatcher.dispatch(CONVERSATION_UNREAD_COUNT_CHANGED, Time.zone.now, conversation: conversation)
+    Rails.configuration.dispatcher.dispatch(
+      CONVERSATION_UNREAD_COUNT_CHANGED,
+      Time.zone.now,
+      conversation: conversation,
+      changed_attributes: changed_attributes
+    )
     true
   end
 end

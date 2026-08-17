@@ -21,7 +21,7 @@ describe ActionCableListener do
     end
     let!(:event) { Events::Base.new(event_name, Time.zone.now, message: message) }
 
-    it 'sends message to account admins, inbox agents and the contact' do
+    it 'sends message to account admins, the assigned agent and the contact' do
       # HACK: to reload conversation inbox members
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
 
@@ -35,7 +35,7 @@ describe ActionCableListener do
       listener.message_created(event)
     end
 
-    it 'sends message to all hmac verified contact inboxes' do
+    it 'sends message to the assigned agent and all hmac verified contact inboxes' do
       # HACK: to reload conversation inbox members
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
       conversation.contact_inbox.update(hmac_verified: true)
@@ -58,7 +58,7 @@ describe ActionCableListener do
     let(:event_name) { :'conversation.typing_on' }
     let!(:event) { Events::Base.new(event_name, Time.zone.now, conversation: conversation, user: agent, is_private: false) }
 
-    it 'sends message to account admins, inbox agents and the contact' do
+    it 'sends message to account admins, the assigned agent and the contact' do
       # HACK: to reload conversation inbox members
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
@@ -78,7 +78,7 @@ describe ActionCableListener do
     let(:event_name) { :'conversation.typing_on' }
     let!(:event) { Events::Base.new(event_name, Time.zone.now, conversation: conversation, user: conversation.contact, is_private: false) }
 
-    it 'sends message to account admins, inbox agents and the contact' do
+    it 'sends message to account admins and the assigned agent' do
       # HACK: to reload conversation inbox members
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
@@ -99,7 +99,7 @@ describe ActionCableListener do
     let!(:agent_bot) { create(:agent_bot, account: account) }
     let!(:event) { Events::Base.new(event_name, Time.zone.now, conversation: conversation, user: agent_bot, is_private: false) }
 
-    it 'sends message to account admins, inbox agents and the contact' do
+    it 'sends message to account admins, the assigned agent and the contact' do
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
         a_collection_containing_exactly(
@@ -118,7 +118,7 @@ describe ActionCableListener do
     let(:event_name) { :'conversation.typing_off' }
     let!(:event) { Events::Base.new(event_name, Time.zone.now, conversation: conversation, user: agent, is_private: false) }
 
-    it 'sends message to account admins, inbox agents and the contact' do
+    it 'sends message to account admins, the assigned agent and the contact' do
       # HACK: to reload conversation inbox members
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
@@ -209,7 +209,7 @@ describe ActionCableListener do
       conversation.add_labels(['support'])
     end
 
-    it 'sends update to inbox members' do
+    it 'sends update to admins, the assigned agent and the contact' do
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
 
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
@@ -241,7 +241,7 @@ describe ActionCableListener do
       account.enable_features!(:conversation_unread_counts)
     end
 
-    it 'sends a lightweight refresh event to inbox agents and admins' do
+    it 'sends a lightweight refresh event to the assigned agent and admins' do
       expect(conversation.inbox.reload.inbox_members.count).to eq(1)
 
       expect(ActionCableBroadcastJob).to receive(:perform_later).with(
@@ -280,7 +280,8 @@ describe ActionCableListener do
         conversation_data: {
           id: conversation.id,
           account_id: account.id,
-          inbox_id: conversation.inbox_id
+          inbox_id: conversation.inbox_id,
+          assignee_id: conversation.assignee_id
         }
       )
 

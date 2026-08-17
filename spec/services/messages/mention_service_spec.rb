@@ -8,7 +8,7 @@ describe Messages::MentionService do
   let!(:third_agent) { create(:user, account: account) }
   let!(:admin_user) { create(:user, account: account, role: :administrator) }
   let!(:inbox) { create(:inbox, account: account) }
-  let!(:conversation) { create(:conversation, account: account, inbox: inbox, assignee: user) }
+  let!(:conversation) { create(:conversation, account: account, inbox: inbox, assignee: first_agent) }
   let!(:team) { create(:team, account: account, name: 'Support Team') }
   let!(:empty_team) { create(:team, account: account, name: 'Empty Team') }
   let(:builder) { double }
@@ -79,7 +79,7 @@ describe Messages::MentionService do
 
   describe 'user mentions' do
     context 'when message contains single user mention' do
-      it 'creates notifications for inbox member who was mentioned' do
+      it 'creates notifications for the assigned agent who was mentioned' do
         message = build(
           :message,
           conversation: conversation,
@@ -151,10 +151,10 @@ describe Messages::MentionService do
         )
       end
 
-      it 'creates notifications for all mentioned inbox members' do
+      it 'creates notifications only for mentioned users who can view the conversation' do
         described_class.new(message: message).perform
 
-        expect(NotificationBuilder).to have_received(:new).with(
+        expect(NotificationBuilder).not_to have_received(:new).with(
           notification_type: 'conversation_mention',
           user: second_agent,
           account: account,
@@ -170,15 +170,15 @@ describe Messages::MentionService do
         )
       end
 
-      it 'adds all mentioned users to the participants list' do
+      it 'adds only mentioned users who can view the conversation to the participants list' do
         described_class.new(message: message).perform
-        expect(conversation.conversation_participants.map(&:user_id)).to contain_exactly(first_agent.id, second_agent.id)
+        expect(conversation.conversation_participants.map(&:user_id)).to contain_exactly(first_agent.id)
       end
 
       it 'passes unique user IDs to UserMentionJob' do
         described_class.new(message: message).perform
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
-          contain_exactly(first_agent.id.to_s, second_agent.id.to_s),
+          [first_agent.id.to_s],
           conversation.id,
           account.id
         )
@@ -186,7 +186,7 @@ describe Messages::MentionService do
     end
 
     context 'when the message sender mentions themselves' do
-      it 'skips the sender notification while notifying other mentioned users' do
+      it 'skips the sender notification and filters out non-assigned agents' do
         message = build(
           :message,
           conversation: conversation,
@@ -205,7 +205,7 @@ describe Messages::MentionService do
           primary_actor: message.conversation,
           secondary_actor: message
         )
-        expect(NotificationBuilder).to have_received(:new).with(
+        expect(NotificationBuilder).not_to have_received(:new).with(
           notification_type: 'conversation_mention',
           user: second_agent,
           account: account,
@@ -280,7 +280,7 @@ describe Messages::MentionService do
 
   describe 'team mentions' do
     context 'when message contains single team mention' do
-      it 'creates notifications for all team members who are inbox members' do
+      it 'creates notifications only for assigned team members' do
         message = build(
           :message,
           conversation: conversation,
@@ -298,7 +298,7 @@ describe Messages::MentionService do
           primary_actor: message.conversation,
           secondary_actor: message
         )
-        expect(NotificationBuilder).to have_received(:new).with(
+        expect(NotificationBuilder).not_to have_received(:new).with(
           notification_type: 'conversation_mention',
           user: second_agent,
           account: account,
@@ -307,7 +307,7 @@ describe Messages::MentionService do
         )
       end
 
-      it 'adds all team members as conversation participants' do
+      it 'adds only assigned team members as conversation participants' do
         message = build(
           :message,
           conversation: conversation,
@@ -318,10 +318,10 @@ describe Messages::MentionService do
 
         described_class.new(message: message).perform
 
-        expect(conversation.conversation_participants.map(&:user_id)).to contain_exactly(first_agent.id, second_agent.id)
+        expect(conversation.conversation_participants.map(&:user_id)).to contain_exactly(first_agent.id)
       end
 
-      it 'passes team member IDs to UserMentionJob' do
+      it 'passes visible team member IDs to UserMentionJob' do
         message = build(
           :message,
           conversation: conversation,
@@ -333,7 +333,7 @@ describe Messages::MentionService do
         described_class.new(message: message).perform
 
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
-          contain_exactly(first_agent.id.to_s, second_agent.id.to_s),
+          [first_agent.id.to_s],
           conversation.id,
           account.id
         )
@@ -347,7 +347,7 @@ describe Messages::MentionService do
         create(:team_member, user: non_inbox_team_member, team: team)
       end
 
-      it 'only notifies team members who are also inbox members' do
+      it 'only notifies team members who can view the conversation' do
         message = build(
           :message,
           conversation: conversation,
@@ -362,7 +362,7 @@ describe Messages::MentionService do
           notification_type: 'conversation_mention', user: first_agent, account: account,
           primary_actor: message.conversation, secondary_actor: message
         )
-        expect(NotificationBuilder).to have_received(:new).with(
+        expect(NotificationBuilder).not_to have_received(:new).with(
           notification_type: 'conversation_mention', user: second_agent, account: account,
           primary_actor: message.conversation, secondary_actor: message
         )
@@ -434,7 +434,7 @@ describe Messages::MentionService do
     end
 
     context 'when same team is mentioned multiple times' do
-      it 'creates only one notification per team member' do
+      it 'creates only one notification for the assigned team member' do
         message = build(
           :message,
           conversation: conversation,
@@ -445,9 +445,9 @@ describe Messages::MentionService do
 
         described_class.new(message: message).perform
 
-        expect(NotificationBuilder).to have_received(:new).exactly(2).times
+        expect(NotificationBuilder).to have_received(:new).once
         expect(Conversations::UserMentionJob).to have_received(:perform_later).with(
-          contain_exactly(first_agent.id.to_s, second_agent.id.to_s),
+          [first_agent.id.to_s],
           conversation.id,
           account.id
         )
@@ -457,7 +457,7 @@ describe Messages::MentionService do
 
   describe 'mixed user and team mentions' do
     context 'when message contains both user and team mentions' do
-      it 'creates notifications for both individual users and team members' do
+      it 'creates notifications only for mentioned users who can view the conversation' do
         message = build(
           :message,
           conversation: conversation,
@@ -471,7 +471,7 @@ describe Messages::MentionService do
 
         described_class.new(message: message).perform
 
-        expect(NotificationBuilder).to have_received(:new).with(
+        expect(NotificationBuilder).not_to have_received(:new).with(
           notification_type: 'conversation_mention', user: third_agent, account: account,
           primary_actor: message.conversation, secondary_actor: message
         )
@@ -479,7 +479,7 @@ describe Messages::MentionService do
           notification_type: 'conversation_mention', user: first_agent, account: account,
           primary_actor: message.conversation, secondary_actor: message
         )
-        expect(NotificationBuilder).to have_received(:new).with(
+        expect(NotificationBuilder).not_to have_received(:new).with(
           notification_type: 'conversation_mention', user: second_agent, account: account,
           primary_actor: message.conversation, secondary_actor: message
         )
@@ -504,13 +504,13 @@ describe Messages::MentionService do
           primary_actor: message.conversation,
           secondary_actor: message
         ).once
-        expect(NotificationBuilder).to have_received(:new).with(
+        expect(NotificationBuilder).not_to have_received(:new).with(
           notification_type: 'conversation_mention',
           user: second_agent,
           account: account,
           primary_actor: message.conversation,
           secondary_actor: message
-        ).once
+        )
       end
     end
   end

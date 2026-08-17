@@ -6,7 +6,7 @@ class Conversations::UnreadCounts::BroadcastScope
   end
 
   def perform
-    return [conversation.account, conversation.inbox.members] if conversation.present?
+    return [conversation.account, conversation_users(conversation.account, current_and_previous_assignee_ids)] if conversation.present?
 
     deleted_conversation_scope
   end
@@ -24,13 +24,22 @@ class Conversations::UnreadCounts::BroadcastScope
     account = Account.find_by(id: conversation_data[:account_id])
     return if account.blank?
 
-    [account, inbox_members_for(account, conversation_data[:inbox_id])]
+    [account, conversation_users(account, [conversation_data[:assignee_id]])]
   end
 
-  def inbox_members_for(account, inbox_id)
-    inbox = account.inboxes.find_by(id: inbox_id)
-    return User.none if inbox.blank?
+  def current_and_previous_assignee_ids
+    ([conversation.assignee_id] + previous_assignee_ids).compact
+  end
 
-    inbox.members
+  def previous_assignee_ids
+    changed_attributes = event.data[:changed_attributes]
+    return [] unless changed_attributes.is_a?(Hash)
+
+    assignee_change = changed_attributes.with_indifferent_access[:assignee_id]
+    assignee_change.is_a?(Array) ? assignee_change.compact : []
+  end
+
+  def conversation_users(account, user_ids)
+    account.users.where(id: user_ids.compact_blank.uniq)
   end
 end

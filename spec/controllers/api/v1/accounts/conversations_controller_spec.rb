@@ -14,7 +14,7 @@ RSpec.describe 'Conversations API', type: :request do
 
     context 'when it is an authenticated user' do
       let(:agent) { create(:user, account: account, role: :agent) }
-      let(:conversation) { create(:conversation, account: account) }
+      let(:conversation) { create(:conversation, account: account, assignee: agent) }
 
       before do
         create(:inbox_member, user: agent, inbox: conversation.inbox)
@@ -54,6 +54,9 @@ RSpec.describe 'Conversations API', type: :request do
         unattended_conversation_waiting_since = create(:conversation, account: account, first_reply_created_at: Time.now.utc)
 
         agent_1 = create(:user, account: account, role: :agent)
+        attended_conversation.update!(assignee: agent_1)
+        unattended_conversation_no_first_reply.update!(assignee: agent_1)
+        unattended_conversation_waiting_since.update!(assignee: agent_1)
         create(:inbox_member, user: agent_1, inbox: attended_conversation.inbox)
         create(:inbox_member, user: agent_1, inbox: unattended_conversation_no_first_reply.inbox)
         create(:inbox_member, user: agent_1, inbox: unattended_conversation_waiting_since.inbox)
@@ -84,7 +87,7 @@ RSpec.describe 'Conversations API', type: :request do
       let(:agent) { create(:user, account: account, role: :agent) }
 
       before do
-        conversation = create(:conversation, account: account)
+        conversation = create(:conversation, account: account, assignee: agent)
         create(:inbox_member, user: agent, inbox: conversation.inbox)
       end
 
@@ -132,8 +135,8 @@ RSpec.describe 'Conversations API', type: :request do
         end
 
         it 'returns unread conversation counts scoped to the signed-in user' do
-          create_unread_conversation(account: account, inbox: visible_inbox, labels: [label.title])
-          create_unread_conversation(account: account, inbox: hidden_inbox, labels: [label.title])
+          create_unread_conversation(account: account, inbox: visible_inbox, labels: [label.title], assignee: agent)
+          create_unread_conversation(account: account, inbox: hidden_inbox, labels: [label.title], assignee: agent)
 
           get "/api/v1/accounts/#{account.id}/conversations/unread_counts",
               headers: agent.create_new_auth_token,
@@ -149,8 +152,8 @@ RSpec.describe 'Conversations API', type: :request do
         end
 
         it 'returns unread team conversation counts scoped to the signed-in user' do
-          create_unread_conversation(account: account, inbox: visible_inbox, team: team)
-          create_unread_conversation(account: account, inbox: hidden_inbox, team: team)
+          create_unread_conversation(account: account, inbox: visible_inbox, assignee: agent, team: team)
+          create_unread_conversation(account: account, inbox: hidden_inbox, assignee: agent, team: team)
 
           get "/api/v1/accounts/#{account.id}/conversations/unread_counts",
               headers: agent.create_new_auth_token,
@@ -185,7 +188,7 @@ RSpec.describe 'Conversations API', type: :request do
       let(:agent) { create(:user, account: account, role: :agent) }
 
       before do
-        conversation = create(:conversation, account: account)
+        conversation = create(:conversation, account: account, assignee: agent)
         create(:message, conversation: conversation, account: account, content: 'test1')
         create(:message, conversation: conversation, account: account, content: 'test2')
         create(:inbox_member, user: agent, inbox: conversation.inbox)
@@ -218,7 +221,7 @@ RSpec.describe 'Conversations API', type: :request do
       let(:agent) { create(:user, account: account, role: :agent) }
 
       before do
-        conversation = create(:conversation, account: account)
+        conversation = create(:conversation, account: account, assignee: agent)
         create(:message, conversation: conversation, account: account, content: 'test1')
         create(:message, conversation: conversation, account: account, content: 'test2')
         create(:inbox_member, user: agent, inbox: conversation.inbox)
@@ -311,7 +314,17 @@ RSpec.describe 'Conversations API', type: :request do
         expect(JSON.parse(response.body, symbolize_names: true)[:id]).to eq(conversation.display_id)
       end
 
-      it 'shows the conversation if you are an agent with access to inbox' do
+      it 'does not show the conversation if you are an agent with access to inbox but not assigned' do
+        create(:inbox_member, user: agent, inbox: conversation.inbox)
+        get "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}",
+            headers: agent.create_new_auth_token,
+            as: :json
+
+        expect(response).to have_http_status(:unauthorized)
+      end
+
+      it 'shows the conversation if you are the assigned agent' do
+        conversation.update!(assignee: agent)
         create(:inbox_member, user: agent, inbox: conversation.inbox)
         get "/api/v1/accounts/#{account.id}/conversations/#{conversation.display_id}",
             headers: agent.create_new_auth_token,

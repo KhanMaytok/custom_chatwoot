@@ -93,6 +93,7 @@ class Whatsapp::IncomingMessageBaseService
       # Pass source_id from parent message since contact objects don't have :id
       create_message(contact, source_id: message[:id], content_attributes_source: message)
       attach_contact(contact)
+      attach_referral_media(message)
       @message.save!
     end
   end
@@ -101,6 +102,7 @@ class Whatsapp::IncomingMessageBaseService
     create_message(message, source_id: message[:id])
     attach_files
     attach_location if message_type == 'location'
+    attach_referral_media(message)
     @message.save!
   end
 
@@ -160,7 +162,7 @@ class Whatsapp::IncomingMessageBaseService
 
   def create_message(message, source_id: nil, content_attributes_source: message)
     @message = @conversation.messages.build(
-      content: message_content(message),
+      content: message_content(message, content_attributes_source),
       account_id: @inbox.account_id,
       inbox_id: @inbox.id,
       message_type: outgoing_echo ? :outgoing : :incoming,
@@ -172,12 +174,47 @@ class Whatsapp::IncomingMessageBaseService
     )
   end
 
+  def message_content(message, content_attributes_source = message)
+    content = super(message)
+    referral_content = referral_message_content(content_attributes_source)
+    [content, referral_content].select(&:present?).join("\n\n")
+  end
+
   def message_content_attributes(message)
     content_attrs = outgoing_echo ? { external_echo: true } : {}
     content_attrs[:in_reply_to_external_id] = @in_reply_to_external_id if @in_reply_to_external_id.present?
     referral_content_attrs = referral_attributes(message)
     content_attrs[:referral] = referral_content_attrs if referral_content_attrs.present?
     content_attrs
+  end
+
+  def referral_message_content(message)
+    referral = referral_attributes(message)
+    return if referral.blank?
+
+    image_url = referral['image_url'].presence || referral['thumbnail_url'].presence
+    lines = [
+      referral['headline'],
+      referral['body'],
+      referral['source_url'],
+      image_url,
+      referral['video_url']
+    ].select(&:present?)
+
+    lines.present? ? "WhatsApp ad referral:\n#{lines.join("\n")}" : nil
+  end
+
+  def attach_referral_media(message)
+    referral = referral_attributes(message)
+    image_url = referral['image_url'].presence || referral['thumbnail_url'].presence
+    return if image_url.blank?
+
+    @message.attachments.new(
+      account_id: @message.account_id,
+      file_type: :image,
+      external_url: image_url,
+      fallback_title: referral['headline'].to_s.first(255)
+    )
   end
 
   def attach_contact(contact)

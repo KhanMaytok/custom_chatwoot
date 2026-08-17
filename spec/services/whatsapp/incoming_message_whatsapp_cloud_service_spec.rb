@@ -275,7 +275,8 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         described_class.new(inbox: whatsapp_channel.inbox, params: referral_params).perform
 
         message = whatsapp_channel.inbox.messages.last
-        expect(message.content).to eq('Hello nielekeze')
+        expect(message.content).to include('Hello nielekeze')
+        expect(message.content).to include('WhatsApp ad referral:', 'Diana Digital', 'washa data tu', 'https://scontent.xx.fbcdn.net/sample.jpg')
         expect(message.content_attributes['referral']).to include(
           'source_url' => 'https://fb.me/3TYpooaRT',
           'source_id' => '52558118838064',
@@ -288,6 +289,10 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
           'ctwa_clid' => 'AfhcQdP2E4A8wWpeb1FqUzUi',
           'welcome_message' => { 'text' => 'Hi! Please let us know how we can help you.' }
         )
+
+        attachment = message.attachments.last
+        expect(attachment.file_type).to eq('image')
+        expect(attachment.external_url).to eq('https://scontent.xx.fbcdn.net/sample.jpg')
       end
 
       it 'preserves the referral payload when the message contains contacts' do
@@ -307,12 +312,13 @@ describe Whatsapp::IncomingMessageWhatsappCloudService do
         described_class.new(inbox: whatsapp_channel.inbox, params: contacts_referral_params).perform
 
         message = whatsapp_channel.inbox.messages.last
-        expect(message.content).to eq('Diana Digital')
+        expect(message.content).to include('Diana Digital', 'WhatsApp ad referral:')
         expect(message.content_attributes['referral']).to include(
           'source_id' => '52558118838064',
           'headline' => 'Diana Digital',
           'ctwa_clid' => 'AfhcQdP2E4A8wWpeb1FqUzUi'
         )
+        expect(message.attachments.last.external_url).to eq('https://scontent.xx.fbcdn.net/sample.jpg')
       end
     end
 

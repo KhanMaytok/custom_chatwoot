@@ -3,7 +3,7 @@ class NotificationListener < BaseListener
     conversation, account = extract_conversation_and_account(event)
     return if conversation.pending?
 
-    conversation.inbox.members.each do |agent|
+    conversation_creation_recipients(account, conversation).each do |agent|
       NotificationBuilder.new(
         notification_type: 'conversation_creation',
         user: agent,
@@ -17,7 +17,7 @@ class NotificationListener < BaseListener
     conversation, account = extract_conversation_and_account(event)
     return if conversation.pending?
 
-    conversation.inbox.members.each do |agent|
+    conversation_creation_recipients(account, conversation).each do |agent|
       NotificationBuilder.new(
         notification_type: 'conversation_creation',
         user: agent,
@@ -52,5 +52,11 @@ class NotificationListener < BaseListener
 
     Messages::MentionService.new(message: message).perform
     Messages::NewMessageNotificationService.new(message: message).perform
+  end
+
+  private
+
+  def conversation_creation_recipients(account, conversation)
+    ([conversation.assignee] + account.administrators.to_a).compact.uniq
   end
 end

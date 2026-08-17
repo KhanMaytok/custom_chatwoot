@@ -5,7 +5,6 @@ class Messages::NewMessageNotificationService
     return unless message.notifiable?
 
     notify_conversation_assignee
-    notify_participating_users
   end
 
   private
@@ -24,23 +23,6 @@ class Messages::NewMessageNotificationService
       primary_actor: message.conversation,
       secondary_actor: message
     ).perform
-  end
-
-  def notify_participating_users
-    participating_users = conversation.conversation_participants.map(&:user)
-    participating_users -= [sender] if sender.is_a?(User)
-
-    participating_users.uniq.each do |participant|
-      next if already_notified?(participant)
-
-      NotificationBuilder.new(
-        notification_type: 'participating_conversation_new_message',
-        user: participant,
-        account: account,
-        primary_actor: message.conversation,
-        secondary_actor: message
-      ).perform
-    end
   end
 
   # The user could already have been notified via a mention or via assignment

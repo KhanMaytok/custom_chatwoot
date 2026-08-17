@@ -643,7 +643,7 @@ describe Conversations::FilterService do
       create(:inbox_member, user: user_1, inbox: inbox_1)
 
       # Create conversations in both inboxes
-      create(:conversation, account: account, inbox: inbox_1)
+      create(:conversation, account: account, inbox: inbox_1, assignee: user_1)
       create(:conversation, account: account, inbox: inbox_2)
     end
 
@@ -653,7 +653,7 @@ describe Conversations::FilterService do
       expect(result[:conversations].count).to eq 2
     end
 
-    it 'filters conversations by inbox membership for non-administrators' do
+    it 'filters conversations by assignment for non-administrators' do
       service = filter_service.new(params, user_1, account)
       result = service.perform
       expect(result[:conversations].count).to eq 1
